@@ -25,3 +25,11 @@ An F1-style reaction time tester built with ESP32-S3 and an ILI9341 TFT display.
 - `diagram.json` — Circuit diagram
 - `libraries.txt` — Required libraries
 - `wokwi-project.txt` — Wokwi project link
+
+## Circuit Diagram
+
+![Circuit Diagram](images/circuit.png)
+
+## Gameplay
+
+![Gameplay](images/gameplay.png)
