@@ -1,230 +1,195 @@
 # ESP32 F1 Reaction Game
 
-**An F1-inspired reaction time tester built with ESP32-S3, an ILI9341 TFT display, and physical LEDs.**
+**English** | [简体中文](README.zh-CN.md)
 
-A beginner-friendly embedded systems project that simulates a Formula 1 starting light sequence and measures the player's reaction time using a physical push button.
+**An F1-inspired reaction game built with ESP32-S3, an ILI9341 TFT display, and five external red LEDs.**
 
-The project features a graphical interface, false-start detection, selectable operating modes, and configurable timing compensation.
+Start a round, watch the lights build up, and press the button as soon as the external LEDs go out. The game measures your response, detects false starts, and keeps the result on screen until you reset it.
 
-**Current status:** Functional Wokwi simulation. Physical hardware testing and timing calibration are planned.
+[Run the Wokwi project](https://wokwi.com/projects/479746846531493889) · [Hardware notes](docs/hardware-notes.md) · [Reference documents](docs/references.md)
 
-## Project Preview
+**Status:** The latest code changes passed user-reported functional testing. The exact test environment and dependency versions have not yet been recorded. Independent physical timing calibration remains pending.
 
-### Circuit Diagram
+## Preview
 
-![Circuit Diagram](images/circuit.png)
+### Circuit
+
+![Wokwi circuit diagram](images/circuit.png)
 
 ### Gameplay
 
-![Gameplay](images/gameplay.png)
+![Game display and starting lights](images/gameplay.png)
 
-**[▶ Run the project in Wokwi](https://wokwi.com/projects/479746846531493889)**
+These images illustrate the project; they may predate the latest on-screen hints. Before running the linked simulation, check that its sketch matches this repository's current `sketch.ino`.
 
 ## Features
 
-- Five physical red LEDs controlled by ESP32-S3 GPIO pins
-- 320 × 240 TFT graphical interface
-- F1-style starting lights arranged in two rows and five columns
-- Randomized lights-out sequence
-- Reaction time measurement using GPIO interrupts
-- False-start and timeout detection
-- Manual start and reset using a single push button
-- Physical switch for selecting Debug or Normal mode
-- Configurable timing multiplier and fixed latency compensation
-- Serial output for inspecting measured results
+- Five GPIO-controlled external LEDs with an 800 ms lighting interval
+- Randomized 1–3 second wait after the fifth LED illuminates
+- 320 × 240 TFT interface with five two-row lamp boxes; the upper row stays gray
+- Interrupt-timestamped button presses and raw reaction times in milliseconds
+- False-start detection and a 10-second reaction deadline
+- Debug and Normal modes, locked for each round
+- Button-release debounce that tracks edges while the display is being updated
+- Explicit start, reaction, and reset actions using one button
+- Configurable timing compensation and serial output at 115200 baud
+- Partial display refresh on reset to reduce full-screen flicker
 
-## Hardware Requirements
+## How to Play
 
-| Component | Quantity | Description |
-|---|---:|---|
-| ESP32-S3 development board | 1 | ESP32-S3 DevKitC-style board |
-| ILI9341 TFT display | 1 | 2.8-inch, 320 × 240, SPI |
-| Red LEDs | 5 | 5 mm LEDs |
-| 220Ω resistors | 5 | Current limiting for LEDs |
-| Momentary push button | 1 | Start, reaction, and reset |
-| Slide switch | 1 | Debug / Normal selection |
-| Breadboard | As needed | Solderless prototyping |
-| Jumper wires | As needed | Electrical connections |
-| USB cable | 1 | Programming and power |
+1. Select **Debug** or **Normal** using the slide switch. Let the switch settle before starting.
+2. Release the button, then press it to start a round.
+3. Release the button and wait while the five external red LEDs illuminate one by one.
+4. After all five are on, keep waiting through the random delay.
+5. **Watch the external LEDs. Press the button as soon as they go out.**
+6. Read your result, then release the button and press again to reset.
+7. Press once more to start the next round.
 
-The planned physical development board is an ESP32-S3 N16R8 variant with 16 MB Flash and 8 MB PSRAM.
+The external LEDs are the timing reference. The TFT lamps and `GO!` message update afterward over SPI, so reacting to the screen instead can add display latency to the measurement. The screen includes a `WATCH PHYSICAL LEDS` reminder.
 
-## Pin Connections
+| Outcome | Meaning | Next action |
+|---|---|---|
+| Reaction time | An accepted press occurred before the 10-second deadline | Release, then press to reset |
+| `FALSE START!` | A press was detected before lights-out, or the button was held at lights-out | Release, then press to reset |
+| `TIMEOUT!` | No accepted reaction occurred before the deadline; exactly 10 seconds also counts as timeout | Release, then press to reset |
 
-### TFT Display — SPI Interface
+The game never resets or starts another round automatically. After a result page or reset finishes drawing, the button must remain released for at least 30 ms before another press is accepted. Presses during result-page rendering are discarded; holding the button does not repeatedly activate controls. At startup, release a held button before trying to start.
 
-| TFT Pin | ESP32-S3 |
+## Operating Modes
+
+| Mode | Switch input | Display behavior |
+|---|---|---|
+| Debug | GPIO17 LOW | Updates `RAW` and `CAL` approximately every 100 ms during the reaction phase, then holds both final values |
+| Normal | GPIO17 HIGH | Hides the live timer and shows the compensated result after a valid press |
+
+`RAW` is the timestamp difference without compensation. `CAL` is the compensated value. Moving the switch during a round does not change that round's mode; reset before starting with the new selection.
+
+## Hardware and Wiring
+
+The simulation uses an ESP32-S3-DevKitC-1. The planned physical board is a vendor-supplied N16R8 variant, nominally 16 MB Flash and 8 MB PSRAM; verify its markings, revision, pinout, and configuration before use.
+
+| Component | Quantity |
+|---|---:|
+| ESP32-S3 development board | 1 |
+| ILI9341 2.8-inch SPI TFT module | 1 |
+| Red LEDs | 5 |
+| 220 Ω LED series resistors | 5 |
+| Momentary push button | 1 |
+| Slide switch | 1 |
+| Breadboards, jumper wires, and USB cable | As needed |
+
+### TFT Display
+
+| TFT pin | ESP32-S3 connection |
 |---|---|
-| VCC | 3V3 |
+| VCC | 3V3 in the simulation |
 | GND | GND |
 | CS | GPIO10 |
 | RST | GPIO8 |
 | D/C | GPIO9 |
 | MOSI | GPIO11 |
 | SCK | GPIO12 |
-| LED / Backlight | 3V3 in Wokwi |
+| LED / Backlight | 3V3 in the simulation |
 | MISO | Not used |
 
-**Note:** Backlight power and input voltage requirements must be checked against the specific physical TFT module before wiring it.
+For a physical module, check its supply requirements, backlight current, regulator, and solder-jumper configuration against the matching module documentation. The simulation's supply wiring is not a substitute for checking the actual board.
 
-### Physical LEDs
+### External LEDs
 
-| LED | GPIO | Resistor |
+| LED | GPIO | Series resistor |
 |---|---|---|
-| LED 1 | GPIO4 | 220Ω |
-| LED 2 | GPIO5 | 220Ω |
-| LED 3 | GPIO6 | 220Ω |
-| LED 4 | GPIO7 | 220Ω |
-| LED 5 | GPIO15 | 220Ω |
+| 1 | GPIO4 | 220 Ω |
+| 2 | GPIO5 | 220 Ω |
+| 3 | GPIO6 | 220 Ω |
+| 4 | GPIO7 | 220 Ω |
+| 5 | GPIO15 | 220 Ω |
 
-Each LED is connected in series with its own current-limiting resistor. All LED cathodes connect to GND.
+Each LED has its own series resistor. Connect the LED cathodes to the common ground.
 
-### User Controls
+### Button and Mode Switch
 
-| Component | GPIO | Connection |
-|---|---|---|
-| Reaction button | GPIO16 | Button to GND |
-| Mode switch | GPIO17 | Switch common to GPIO17, one side to GND |
+| Control | Connection |
+|---|---|
+| Reaction button | GPIO16 to GND when pressed |
+| Mode switch | Common terminal to GPIO17, one side to GND; leave the other side unconnected |
 
-Both inputs use the ESP32's internal pull-up resistors.
+Both inputs use internal pull-ups. Use a common ground for the development board, display, and controls.
 
-- **GPIO17 LOW:** Debug mode
-- **GPIO17 HIGH:** Normal mode
+## Running the Project
 
-## How to Play
+### Wokwi
 
-1. Select **Debug** or **Normal** using the slide switch.
-2. Press the reaction button to start a new round.
-3. The five red starting lights illuminate sequentially.
-4. After all five lights illuminate, the system waits for a random interval.
-5. When the lights go out, press the button as quickly as possible.
-6. The TFT displays your reaction time.
-7. Press the button again to reset the game.
+1. Open the [simulation](https://wokwi.com/projects/479746846531493889).
+2. Compare the online sketch with this repository and update it if necessary. Local Git changes do not automatically update the linked Wokwi project.
+3. Start the simulation, select a mode, and follow the gameplay steps above.
+4. Watch the five external simulated LEDs for the start signal.
 
-Pressing the button before lights-out results in a **FALSE START**.
+`diagram.json` contains the circuit connections. `libraries.txt` lists the display-library dependencies.
 
-If no valid reaction is detected within 10 seconds, the game displays **TIMEOUT**.
+### Physical ESP32-S3
 
-The game does not start or reset automatically.
+1. Install Arduino IDE with the Espressif ESP32 board package.
+2. Install **Adafruit GFX Library** and **Adafruit ILI9341**, including their required dependencies.
+3. Place `sketch.ino` in an Arduino sketch folder with a matching name, or let Arduino IDE create the matching folder when opening it.
+4. Select the board and Flash/PSRAM settings that match the actual module, then select its USB port.
+5. Verify the wiring, supply, and display module settings before powering the circuit.
+6. Compile and upload the sketch. Open the serial monitor at **115200 baud** to inspect successful results, false starts, and timeouts.
+7. Record the board-package and library versions used for a successful build. Calibrate independently before making accuracy claims.
 
-## Operating Modes
+The sketch uses the ESP32 Arduino environment, including its GPIO interrupts and FreeRTOS critical-section primitives. Dependency versions are not currently pinned.
 
-### Debug Mode
+## Timing and Configuration
 
-Designed for testing, observation, and timing calibration.
+The program switches off all five external LEDs, then immediately records `lightsOutUs` with `micros()`. The accepted button-press interrupt records `pressTimeUs`. The interval is calculated from those timestamps, rather than from when the main loop finishes updating the display.
 
-- Shows a continuously updated timer after lights-out
-- Displays the raw measured time (`RAW`)
-- Displays a compensated time preview (`CAL`)
-- Stops updating the displayed values after the reaction button is pressed
-- Keeps the result visible until manual reset
-
-### Normal Mode
-
-Designed for regular gameplay.
-
-- Hides the continuously updated timer
-- Displays the starting light sequence
-- Calculates and displays the compensated reaction time after the button press
-- Waits for manual reset before another round
-
-The selected mode is locked when a round begins. Switching modes during a round does not affect that round.
-
-## Reaction Time Measurement
-
-The ESP32-S3 uses `micros()` to obtain timestamps in microseconds.
-
-When the five physical LEDs are switched off, the program records a starting timestamp. A GPIO interrupt records the reaction button's falling-edge timestamp.
-
-The raw reaction time is calculated as:
-
-\[
-T_{\mathrm{raw}}=\frac{t_{\mathrm{press}}-t_{\mathrm{start}}}{1000}
-\]
-
-Here, the timestamps are measured in microseconds, while the result is expressed in milliseconds.
-
-### Timing Compensation
-
-Two optional compensation parameters are supported:
-
-- **Time Multiplier:** Scales the measured interval
-- **Fixed Compensation:** Subtracts a fixed time offset
-
-The displayed compensated value is:
-
-\[
-T_{\mathrm{final}}=\max(0,T_{\mathrm{raw}}\times M-D)
-\]
-
-Where:
-
-- \(T_{\mathrm{raw}}\) — raw reaction time in milliseconds
-- \(M\) — time multiplier
-- \(D\) — fixed compensation in milliseconds
-
-Both parameters can be changed near the beginning of `sketch.ino`:
-
-```cpp
-const float TIME_MULTIPLIER = 1.0f;
-const float FIXED_COMPENSATION_MS = -80.0f;
+```text
+raw_ms   = (press_time_us - lights_out_us) / 1000
+final_ms = max(0, raw_ms × TIME_MULTIPLIER - FIXED_COMPENSATION_MS)
 ```
 
-The current source setting adds 80 ms because the formula subtracts a negative offset. To disable compensation, use `M = 1.0` and `D = 0.0`. The current offset is experimental and has not been validated on physical hardware.
+Current settings near the beginning of `sketch.ino`:
 
-**Accuracy note:** Wokwi simulation speed may differ from real-world time. The multiplier is intended for experimentation with simulated timing, not as proof of measurement accuracy. Real hardware should normally start with a multiplier of `1.0` and an offset of `0.0 ms`, followed by independent calibration.
+| Constant | Value | Purpose |
+|---|---|---|
+| `TIME_MULTIPLIER` | `1.0f` | Scales the raw interval |
+| `FIXED_COMPENSATION_MS` | `-80.0f` | Subtracts an offset; this negative value **adds 80 ms** |
+| `LIGHT_INTERVAL_MS` | `800` | Nominal delay before each next LED illuminates |
+| `WAIT_MIN_MS` | `1000` | Minimum randomized wait after the fifth LED |
+| `WAIT_MAX_MS` | `3000` | Maximum randomized wait, inclusive |
+| `REACTION_TIMEOUT_US` | `10000000UL` | Reaction deadline in microseconds |
+| `DEBUG_REFRESH_MS` | `100` | Nominal live-timer refresh interval |
+| `BUTTON_RELEASE_MS` | `30` | Stable release required before accepting another press |
+| `MODE_DEBOUNCE_MS` | `40` | Mode-switch debounce interval |
 
-## Software Architecture
+For example, a raw interval of **200 ms** currently displays **280 ms** as the compensated result. To disable compensation, set `TIME_MULTIPLIER` to `1.0f` and `FIXED_COMPENSATION_MS` to `0.0f`.
 
-The program uses a state machine with five states:
+The existing offset is an experimental setting, not a measured universal correction for TFT latency. Microsecond timestamps and a one-decimal-place display do not establish equivalent measurement accuracy. Interrupt latency, sequential LED switching, display response, and simulation timing still affect the system; physical calibration requires an independent timing reference.
 
-| State | Description |
+## Program Structure
+
+| State | Responsibility |
 |---|---|
-| `ST_IDLE` | Waiting for the start button |
-| `ST_LIGHTING` | Illuminating the starting lights |
-| `ST_WAIT` | Random delay before lights-out |
-| `ST_REACTION` | Measuring reaction time |
-| `ST_RESULT` | Displaying the result until reset |
+| `ST_IDLE` | Wait for a manual start |
+| `ST_LIGHTING` | Illuminate the five LEDs sequentially |
+| `ST_WAIT` | Keep the LEDs on through the randomized wait |
+| `ST_REACTION` | Accept a timestamped reaction or reach the deadline |
+| `ST_RESULT` | Hold the result, false-start message, or timeout until reset |
 
-The main loop handles state transitions, while the button interrupt records the button press timestamp.
+The `CHANGE` interrupt tracks both press and release edges, including release bounce during TFT drawing. Only the first armed press is retained. The main loop rearms input after a stable release, while a shared critical-section lock protects the event and timestamp data.
 
-This design separates game logic, timing calculations, input handling, and TFT drawing into individual functions.
+At the timeout boundary, an already-recorded press is evaluated using its original timestamp. If no event is pending, input is closed atomically before displaying the timeout. Result-page transitions clear old events and require a fresh stable release before reset.
 
-## Running the Simulation
+Only changing screen regions are redrawn on reset; the title, lamp frames, and upper gray lamps remain in place.
 
-The project can be tested online without physical hardware.
+## Validation Status
 
-1. Open the [Wokwi simulation](https://wokwi.com/projects/479746846531493889).
-2. Start the simulation.
-3. Select the desired mode using the slide switch.
-4. Press the green reaction button to begin.
-5. Watch the LEDs and TFT display.
-6. Press the button after lights-out to measure your reaction time.
+- The latest revision passed user-reported functional testing.
+- Supplementary desktop checks passed 32 assertions covering debounce during drawing, held buttons, timeout boundaries, timestamp wraparound, mode locking, and a complete round. These checks used simulated hardware interfaces and do not replace an ESP32-target build or physical measurements.
+- The user's exact test platform, board revision, dependency versions, and independent calibration measurements are not yet documented.
 
-The simulation uses these Arduino libraries:
+Useful checks when changing the sketch include an early press, a held button through lights-out, repeated release bounce, both operating modes, a press just before the deadline, a timeout followed by reset, and repeated complete rounds.
 
-- [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library)
-- [Adafruit ILI9341](https://github.com/adafruit/Adafruit_ILI9341)
-- SPI (included with the Arduino ESP32 environment)
-
-Library dependencies are listed in `libraries.txt`.
-
-## Using Physical Hardware
-
-For physical deployment:
-
-1. Install Arduino IDE and the Espressif ESP32 board package.
-2. Install Adafruit GFX and Adafruit ILI9341 through the Library Manager.
-3. Select the appropriate ESP32-S3 board and its Flash/PSRAM configuration.
-4. Assemble the circuit following the pin connection tables.
-5. Verify the module's voltage and backlight requirements.
-6. Upload `sketch.ino`.
-7. Test LED outputs, button behavior, and display operation.
-8. Calibrate the timing system before treating results as accurate real-world measurements.
-
-Physical hardware performance has not yet been verified.
-
-## Project Structure
+## Repository Layout
 
 ```text
 ESP32-F1-Reaction-Game/
@@ -233,6 +198,7 @@ ESP32-F1-Reaction-Game/
 ├── libraries.txt
 ├── wokwi-project.txt
 ├── README.md
+├── README.zh-CN.md
 ├── LICENSE
 ├── images/
 │   ├── circuit.png
@@ -242,29 +208,16 @@ ESP32-F1-Reaction-Game/
     └── references.md
 ```
 
-Project-specific wiring notes are in [`docs/hardware-notes.md`](docs/hardware-notes.md). Upstream hardware documentation is linked from [`docs/references.md`](docs/references.md); vendor PDF and software bundles are not redistributed in the current tree.
+[Hardware notes](docs/hardware-notes.md) contain the wiring record and outstanding physical checks. [Reference documents](docs/references.md) link to upstream board, panel, and controller documentation. Vendor PDF bundles and software installers are not redistributed in the current tree; previous commits may still contain older materials.
 
-## Technical References
+## Further Work
 
-- [Espressif — ESP32-S3 Technical Documents](https://www.espressif.com/en/support/documents/technical-documents)
-- [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library)
-- [Adafruit ILI9341 Library](https://github.com/adafruit/Adafruit_ILI9341)
-- [Wokwi Documentation](https://docs.wokwi.com/)
-
-Third-party datasheets and documentation remain the property of their respective copyright holders.
-
-## Future Improvements
-
-- Testing and calibration on a physical ESP32-S3
-- Improved TFT rendering performance
-- High-score tracking and persistent storage
-- Reaction time statistics over multiple rounds
-- Improved button debounce and timing validation
-- Optional sound effects and additional game modes
-- A compact enclosure for the finished device
+- Record a reproducible ESP32 build environment and detailed test results
+- Measure and calibrate physical input and visual-signal timing
+- Refresh screenshots to match the latest interface
+- Add best-time tracking and multi-round statistics
+- Explore additional display optimizations and a physical enclosure
 
 ## License
 
-The original project code is released under the [MIT License](LICENSE).
-
-Third-party libraries, documentation, and hardware datasheets are subject to their respective licenses and copyright notices.
+Original project code and documentation are released under the [MIT License](LICENSE). Third-party libraries, datasheets, tools, and other referenced materials retain their respective licenses and copyright notices.
