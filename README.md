@@ -167,10 +167,10 @@ Both parameters can be changed near the beginning of `sketch.ino`:
 
 ```cpp
 const float TIME_MULTIPLIER = 1.0f;
-const float FIXED_COMPENSATION_MS = 0.0f;
+const float FIXED_COMPENSATION_MS = -80.0f;
 ```
 
-The default values disable compensation.
+The current source setting adds 80 ms because the formula subtracts a negative offset. To disable compensation, use `M = 1.0` and `D = 0.0`. The current offset is experimental and has not been validated on physical hardware.
 
 **Accuracy note:** Wokwi simulation speed may differ from real-world time. The multiplier is intended for experimentation with simulated timing, not as proof of measurement accuracy. Real hardware should normally start with a multiplier of `1.0` and an offset of `0.0 ms`, followed by independent calibration.
 
@@ -239,10 +239,10 @@ ESP32-F1-Reaction-Game/
 │   └── gameplay.png
 └── docs/
     ├── hardware-notes.md
-    └── datasheets/
+    └── references.md
 ```
 
-The `images/` and `docs/` directories are optional and can be added as the project develops.
+Project-specific wiring notes are in [`docs/hardware-notes.md`](docs/hardware-notes.md). Upstream hardware documentation is linked from [`docs/references.md`](docs/references.md); vendor PDF and software bundles are not redistributed in the current tree.
 
 ## Technical References
 
